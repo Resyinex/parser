@@ -1,3 +1,9 @@
+"""
+Program is scrapping information from site https://www.zoopla.co.uk/
+And saving data in EXCEL file
+"""
+
+
 from openpyxl import Workbook
 import time
 import requests
@@ -29,6 +35,8 @@ session.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Appl
 
 
 def load_page(url, parameters):
+    """Appeals to specified URL and returns whole site,
+    if error appears - waiting for 5 sec and tries again"""
     while True:
         try:
             request = session.get(url=url, params=parameters)
@@ -39,6 +47,8 @@ def load_page(url, parameters):
 
 
 def load_page_text(url, parameters):
+    """Appeals to specified URL and return only text part
+    if error appears - waiting for 5 sec and tries again"""
     while True:
         try:
             request = session.get(url=url, params=parameters)
@@ -49,6 +59,8 @@ def load_page_text(url, parameters):
 
 
 def get_detail_url(list_of_url_endings):
+    """Take list of endings for site, connects with main URL,
+    and returns list of URLs for every add"""
     main_url = 'https://www.zoopla.co.uk/'
     list_for_full_urls = []
     for each_ending in list_of_url_endings:
@@ -62,21 +74,30 @@ def get_detail_url(list_of_url_endings):
 # ---------------------------------------------------------------------------------------------------------------------
 
 def soup_page(requested_page, parsing_limits=None):
+    """Translate taken with "requests" text into XML and returns it"""
     xml_text = BeautifulSoup(requested_page, 'lxml', parse_only=SoupStrainer(name=parsing_limits[0], attrs=parsing_limits[1]))
     return xml_text
 
 
 def find_tag(xml_text, search_options):
+    """Looking for tag and attribute in taken XML text
+    and returns it as a str"""
     tag = xml_text.find(name=search_options[0], attrs=search_options[1])
     return tag
 
 
 def find_tags(xml_text, search_options):
+    """Looking for group of similar tags by specified properties in taken XLM text
+    and returns them as a list"""
     tags = xml_text.find_all(name=search_options[0], attrs=search_options[1])
     return tags
 
 
 def get_value(tag, search_value_in):
+    """Taking whole tag and attribute/tag whose value needed to get,
+    checking if tag empty or not,
+    retrieving the value from tag or attribute,
+    and returns desired value"""
     if tag is None:
         value = None
     elif tag.name == search_value_in:
@@ -87,6 +108,8 @@ def get_value(tag, search_value_in):
 
 
 def page_parsing(url, url_parameters, parsing_limits, search_options, value_options):
+    """Requesting page, translate it,
+    looking and collecting in list all add detail URLs and returns list"""
     requesting_text = load_page_text(url, url_parameters)
     souping = soup_page(requesting_text, parsing_limits)
     found_tags = find_tags(souping, search_options)
@@ -98,14 +121,16 @@ def page_parsing(url, url_parameters, parsing_limits, search_options, value_opti
 
 
 def detail_parsing(url, url_parameters, parsing_limits, search_options, value_options):
+    """Requesting page, translate it,
+    looking for necessary information about add and returns it as a list"""
     requesting_page = load_page(url, url_parameters)
     souping = soup_page(requesting_page.text, parsing_limits)
     requesting_date = requesting_page.headers['Date']
-    extended_info = [url, requesting_date]
+    extended_info = [url, requesting_date]  # additional information
     values_result = []
-    for each_option in search_options:
-        found_tag = find_tag(souping, each_option)
-        found_value = get_value(found_tag, value_options[search_options.index(each_option)])
+    for each_option in search_options:  # searches multiple tags in turn
+        found_tag = find_tag(souping, each_option)  # tag searching
+        found_value = get_value(found_tag, value_options[search_options.index(each_option)])  # order of search options for tags and values are matches
         values_result.append(found_value)
     detail_parsing_result = values_result + extended_info
     return detail_parsing_result
@@ -116,6 +141,7 @@ def detail_parsing(url, url_parameters, parsing_limits, search_options, value_op
 # ---------------------------------------------------------------------------------------------------------------------
 
 def price_corrector(raw_price, raw_price_pft, raw_price_pcm):
+    """Correcting values for prices by removing unnecessary values"""
     if raw_price.isalpha() or raw_price is None:
         corrected_price = raw_price
     else:
@@ -132,6 +158,7 @@ def price_corrector(raw_price, raw_price_pft, raw_price_pcm):
 
 
 def address_converter(address):
+    """Separating string with address"""
     con_address, con_city, con_postal_code = None, None, None
     if address is not None:
         street = str()
@@ -154,6 +181,7 @@ def address_converter(address):
 
 
 def get_identifier(url):
+    """Extract ID from URL"""
     first_split = url.split("?")
     second_split = first_split[0].split("/")
     identifier = second_split[-1]
@@ -161,6 +189,7 @@ def get_identifier(url):
 
 
 def description_corrector(desc):
+    """Correcting description"""
     if desc is None:
         return None
     replacing_desc = desc.replace("\n", "")
@@ -169,6 +198,7 @@ def description_corrector(desc):
 
 
 def surface_corrector(surf):
+    """Correcting surface area"""
     if surf is None:
         return None
     rep_surf = surf.replace("From", "")
@@ -177,6 +207,7 @@ def surface_corrector(surf):
 
 
 def value_sort(detail_values):
+    """Sorting all data and places them in required order"""
     price, price_pft, price_pcm = price_corrector(detail_values[0], detail_values[1], detail_values[2])
     address, city, postal_code = address_converter(detail_values[3])
     description = description_corrector(detail_values[5])
@@ -202,6 +233,16 @@ PROPOSE_URLS = [{'page_size': 25, 'pn': 1},
                 ['a', 'listing-results-price text-price'],
                 'href']
 
+"""
+price_tag = ['p', 'ui-pricing__main-price ui-text-t4']
+price_pft_tag = ['p', 'ui-pricing__area-price']
+price_pcm_tag = ['p', 'ui-pricing__alt-price']
+address_tag = ['h2', 'ui-property-summary__address']
+
+m2_tag = ['span', 'dp-features-list__text']
+description_tag = ['div', 'dp-description__text']
+agent_tag = ['h4', 'ui-agent__name']
+"""
 PROPOSE_DETAILS = [None,
                    ['div', {'class': 'ui-layout'}],
                    [['p', 'ui-pricing__main-price ui-text-t4'],
@@ -241,6 +282,7 @@ def run_program(page_amount, propose_urls, propose_details, regions):
                                            parsing_limits=page_amount[1],
                                            search_options=page_amount[2],
                                            value_options=page_amount[3])
+            # designation of last page and verification in the case if there is no more pages
             if len(amount_of_pages) == 0:
                 last_page = 1
             else:
